@@ -1,0 +1,77 @@
+#!/bin/bash
+
+# MongoDB Installation
+echo "Configuring MongoDB..."
+echo "[mongodb-org-7.0.3]
+name=MongoDB Repository
+baseurl=https://repo.mongodb.org/yum/redhat/\$releasever/mongodb-org/7.0.3/x86_64/
+gpgcheck=1
+enabled=1
+gpgkey=https://www.mongodb.org/static/pgp/server-7.0.3.asc" | sudo tee /etc/yum.repos.d/mongodb-org-7.0.3.repo
+
+sudo yum install -y mongodb-org java-1.8.0-openjdk unzip wget
+
+sudo sed -i '/^SELINUX=.*/s//SELINUX=disabled/' /etc/selinux/config
+sudo reboot
+
+# UniFi Controller Installation
+echo "Downloading UniFi Controller..."
+wget https://www.ubnt.com/downloads/unifi/8.0.26/UniFi.unix.zip -O UniFi.unix.zip
+
+echo "Unzipping UniFi Controller to /opt..."
+sudo unzip -q UniFi.unix.zip -d /opt
+
+echo "Creating data folder within UniFi directory..."
+sudo mkdir /opt/UniFi/data
+
+echo "Adding new user to run service..."
+sudo useradd -r ubnt
+
+echo "Assigning ownership of UniFi directory to ubnt..."
+sudo chown -R ubnt:ubnt /opt/UniFi
+
+echo "Configuring firewall rules..."
+echo "<?xml version=\"1.0\" encoding=\"utf-8\"?>
+<zone>
+  <short>Public</short>
+  <description>For use in public areas. You do not trust the other computers on networks to not harm your computer. Only selected incoming connections are accepted.</description>
+  <service name=\"dhcpv6-client\"/>
+  <port protocol=\"tcp\" port=\"8081\"/>
+  <port protocol=\"tcp\" port=\"8080\"/>
+  <port protocol=\"tcp\" port=\"8443\"/>
+  <port protocol=\"tcp\" port=\"8880\"/>
+  <port protocol=\"tcp\" port=\"8843\"/>
+  <port protocol=\"tcp\" port=\"27117\"/>
+  <port protocol=\"udp\" port=\"3478\"/>
+</zone>" | sudo tee /etc/firewalld/zones/public.xml
+
+echo "Reloading firewall for changes to take effect..."
+sudo firewall-cmd --reload
+
+# Enable and start MongoDB
+sudo systemctl enable mongod
+sudo systemctl start mongod
+sudo systemctl status mongod
+
+# Create UniFi Controller service
+echo "Creating UniFi Controller service..."
+echo "[Unit]
+Description=UniFi AP Web Controller
+After=syslog.target network.target
+
+[Service]
+Type=simple
+User=ubnt
+WorkingDirectory=/opt/UniFi
+ExecStart=/usr/bin/java -jar /opt/UniFi/lib/ace.jar start 
+ExecStop=/usr/bin/java -jar /opt/UniFi/lib/ace.jar stop
+SuccessExitStatus=143
+
+[Install]
+WantedBy=multi-user.target" | sudo tee /etc/systemd/system/unifi.service
+
+# Enable and start UniFi Controller service
+sudo systemctl enable unifi
+sudo systemctl start unifi
+
+echo "UniFi Controller installation completed successfully."
