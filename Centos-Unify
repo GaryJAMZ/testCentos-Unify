@@ -1,0 +1,6 @@
+#!/bin/bash
+
+
+
+sudo sed -i '/^SELINUX=.*/s//SELINUX=disabled/' /etc/selinux/config
+sudo reboot
